@@ -3,6 +3,7 @@ package com.example.beziertest
 import android.content.Context
 import android.graphics.*
 import android.util.AttributeSet
+import android.util.Log
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewConfiguration
@@ -16,6 +17,12 @@ class MetaBallView : View {
     private var k1: Float = 0F
     private var k2: Float = 0F
     private var radius = 50F
+    private var bezierX: Float = 300F
+    private var bezierY: Float = 500F
+    private var lastTime: Long = 0
+    private var isUp = false
+
+    private val slop = ViewConfiguration.get(context).scaledTouchSlop
 
     init {
         mPaint.isAntiAlias = true
@@ -28,18 +35,17 @@ class MetaBallView : View {
         const val ORIGIN_Y: Float = 500F
     }
 
-    private var bezierX: Float = 300F
-    private var bezierY: Float = 500F
-
     constructor(context: Context) : super(context)
 
     constructor(context: Context, attributeSet: AttributeSet) : super(context, attributeSet)
 
     override fun onDraw(canvas: Canvas?) {
         super.onDraw(canvas)
+        lastTime = System.currentTimeMillis()
         drawFirstCircle(canvas)
         drawBezierLine(canvas)
         drawSecondCircle(canvas)
+        moveCircle()
     }
 
     private fun drawFirstCircle(canvas: Canvas?) {
@@ -60,8 +66,6 @@ class MetaBallView : View {
             mPath.quadTo(list[4].x, list[4].y, list[1].x, list[1].y)
             mPath.close()
             canvas?.drawPath(mPath, mPaint)
-        } else {
-            move2Origin()
         }
     }
 
@@ -128,15 +132,25 @@ class MetaBallView : View {
         canvas?.drawCircle(bezierX, bezierY, radius, mPaint)
     }
 
+    private fun moveCircle() {
+        if (isUp) {
+            move2Origin()
+        }
+    }
+
     override fun onTouchEvent(event: MotionEvent?): Boolean {
         event?.let {
+            Log.e("test", "action type: ${event.action}")
             when (event.action) {
+
                 MotionEvent.ACTION_MOVE -> {
+                    isUp = false
                     bezierX = event.x
                     bezierY = event.y
                     invalidate()
                 }
                 MotionEvent.ACTION_UP -> {
+                    isUp = true
                     move2Origin()
                 }
                 else -> {
@@ -148,14 +162,23 @@ class MetaBallView : View {
 
     private fun move2Origin() {
         if (getDistance() > 3 * radius) {
-            val k = (bezierY - ORIGIN_Y) / (bezierX - ORIGIN_X)
-            val slop = ViewConfiguration.get(context).scaledTouchSlop
-            if (bezierX > ORIGIN_X) {
-                bezierX -= slop
-                bezierY -= k * slop
-            } else {
-                bezierX += slop
-                bezierY += k * slop
+
+            when {
+                bezierX > ORIGIN_X -> {
+                    val k = (bezierY - ORIGIN_Y) / (bezierX - ORIGIN_X)
+                    val deltaX = sqrt(slop * slop / (k * k + 1))
+                    bezierX -= deltaX
+                    bezierY -= k * deltaX
+                }
+                bezierX < ORIGIN_X -> {
+                    val k = (bezierY - ORIGIN_Y) / (bezierX - ORIGIN_X)
+                    val deltaX = sqrt(slop * slop / (k * k + 1))
+                    bezierX += deltaX
+                    bezierY += k * deltaX
+                }
+                else -> {
+                    bezierY = if (ORIGIN_Y < bezierY) bezierY - slop else bezierY + slop
+                }
             }
             invalidate()
         }
